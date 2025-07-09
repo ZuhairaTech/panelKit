@@ -1,104 +1,94 @@
-// api/github/repos/route.js - Updated to use your deployed backend
-const express = require('express');
-const GitHubAPI = require('../github-api'); // Import the class we created
-const router = express.Router();
+// src/app/api/github/repos/route.js
+import { NextResponse } from 'next/server';
+import GitHubAPI from '@/lib/github-api';
 
-// Middleware to check token
-const requireToken = (req, res, next) => {
-    const token = req.headers.authorization || req.body.token || req.query.token;
-    if (!token) {
-        return res.status(401).json({ error: 'GitHub token required' });
+// Helper function to extract token from request
+function getTokenFromRequest(request) {
+    const authHeader = request.headers.get('authorization');
+    const searchParams = request.nextUrl.searchParams;
+    
+    // Try different sources for the token
+    if (authHeader) {
+        return authHeader.replace('Bearer ', '').replace('token ', '');
     }
-    req.githubToken = token;
-    next();
-};
+    
+    if (searchParams.get('token')) {
+        return searchParams.get('token');
+    }
+    
+    return null;
+}
 
-// Get user repositories (uses your deployed backend)
-router.get('/', requireToken, async (req, res) => {
+// GET /api/github/repos - Get user repositories
+export async function GET(request) {
     try {
-        const api = new GitHubAPI(req.githubToken);
+        const token = getTokenFromRequest(request);
+        
+        if (!token) {
+            return NextResponse.json(
+                { error: 'GitHub token required' },
+                { status: 401 }
+            );
+        }
+
+        const api = new GitHubAPI(token);
         const repos = await api.listRepos();
-        res.json(repos);
-    } catch (error) {
-        res.status(500).json({ error: 'Failed to fetch repositories' });
-    }
-});
-
-// Create issue (uses your deployed backend)
-router.post('/issue', requireToken, async (req, res) => {
-    try {
-        const { repo, title, body } = req.body;
-        const api = new GitHubAPI(req.githubToken);
-        const issue = await api.createIssue(repo, title, body);
-        res.json(issue);
-    } catch (error) {
-        res.status(500).json({ error: 'Failed to create issue' });
-    }
-});
-
-// Get user info
-router.get('/user', requireToken, async (req, res) => {
-    try {
-        const api = new GitHubAPI(req.githubToken);
-        const user = await api.getUserInfo();
-        res.json(user);
-    } catch (error) {
-        res.status(500).json({ error: 'Failed to fetch user info' });
-    }
-});
-
-// Get starred repositories
-router.get('/starred', requireToken, async (req, res) => {
-    try {
-        const api = new GitHubAPI(req.githubToken);
-        const starred = await api.getStarredRepos();
-        res.json(starred);
-    } catch (error) {
-        res.status(500).json({ error: 'Failed to fetch starred repos' });
-    }
-});
-
-// Toggle star on repository
-router.put('/star/:owner/:repo', requireToken, async (req, res) => {
-    try {
-        const { owner, repo } = req.params;
-        const { action } = req.body; // 'star' or 'unstar'
         
-        const api = new GitHubAPI(req.githubToken);
-        const result = await api.toggleStar(`${owner}/${repo}`, action);
-        res.json({ success: result });
-    } catch (error) {
-        res.status(500).json({ error: 'Failed to toggle star' });
-    }
-});
-
-// Update issue
-router.patch('/issue/:owner/:repo/:number', requireToken, async (req, res) => {
-    try {
-        const { owner, repo, number } = req.params;
-        const { title, body } = req.body;
+        return NextResponse.json({ repositories: repos });
         
-        const api = new GitHubAPI(req.githubToken);
-        const issue = await api.updateIssue(`${owner}/${repo}`, number, title, body);
-        res.json(issue);
     } catch (error) {
-        res.status(500).json({ error: 'Failed to update issue' });
+        console.error('Error fetching repositories:', error);
+        return NextResponse.json(
+            { error: 'Failed to fetch repositories' },
+            { status: 500 }
+        );
     }
-});
+}
 
-// Get commits chart data
-router.get('/commits-chart', requireToken, async (req, res) => {
+// POST /api/github/repos/issue - Create issue
+export async function POST(request) {
     try {
-        const api = new GitHubAPI(req.githubToken);
-        const chartData = await api.getCommitsChart();
+        const token = getTokenFromRequest(request);
         
-        res.json({
-            labels: chartData.map(item => item.name),
-            data: chartData.map(item => item.commits)
-        });
-    } catch (error) {
-        res.status(500).json({ error: 'Failed to fetch commits chart data' });
-    }
-});
+        if (!token) {
+            return NextResponse.json(
+                { error: 'GitHub token required' },
+                { status: 401 }
+            );
+        }
 
-module.exports = router;
+        const body = await request.json();
+        const { repo, title, body: issueBody } = body;
+        
+        if (!repo || !title) {
+            return NextResponse.json(
+                { error: 'Repository and title are required' },
+                { status: 400 }
+            );
+        }
+
+        const api = new GitHubAPI(token);
+        const issue = await api.createIssue(repo, title, issueBody);
+        
+        return NextResponse.json(issue);
+        
+    } catch (error) {
+        console.error('Error creating issue:', error);
+        return NextResponse.json(
+            { error: 'Failed to create issue' },
+            { status: 500 }
+        );
+    }
+}
+
+// Handle preflight requests
+export async function OPTIONS(request) {
+    return new Response(null, {
+        status: 200,
+        headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        },
+    });
+}

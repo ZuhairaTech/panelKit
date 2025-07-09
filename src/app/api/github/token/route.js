@@ -1,37 +1,46 @@
-import { NextResponse } from 'next/server'
-import jwt from 'jsonwebtoken'
-import axios from 'axios'
+// src/app/api/github/token/route.js
+import { NextResponse } from 'next/server';
+import axios from 'axios';
 
-export async function GET() {
+export async function GET(req) {
+  const url = new URL(req.url);
+  const code = url.searchParams.get('code');
+
+  if (!code) {
+    return NextResponse.json({ error: 'Missing code' }, { status: 400 });
+  }
+
   try {
-    const appId = process.env.APP_ID
-    const privateKey = process.env.PRIVATE_KEY.replace(/\\n/g, '\n')
-    const installationId = process.env.INSTALLATION_ID
+    const clientId = process.env.GITHUB_CLIENT_ID;
+    const clientSecret = process.env.GITHUB_CLIENT_SECRET;
 
-    const now = Math.floor(Date.now() / 1000)
-    const payload = {
-      iat: now - 60,
-      exp: now + 10 * 60,
-      iss: appId
+    if (!clientId || !clientSecret) {
+      return NextResponse.json({ error: 'Missing GitHub client credentials in environment' }, { status: 500 });
     }
 
-    const token = jwt.sign(payload, privateKey, { algorithm: 'RS256' })
-
     const tokenResponse = await axios.post(
-      `https://api.github.com/app/installations/${installationId}/access_tokens`,
-      {},
+      'https://github.com/login/oauth/access_token',
+      {
+        client_id: clientId,
+        client_secret: clientSecret,
+        code: code,
+      },
       {
         headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/vnd.github+json'
-        }
+          Accept: 'application/json',
+        },
       }
-    )
+    );
 
-    const accessToken = tokenResponse.data.token
-    return NextResponse.json({ accessToken })
+    const { access_token } = tokenResponse.data;
+
+    if (access_token) {
+      return NextResponse.json({ token: access_token });
+    } else {
+      return NextResponse.json({ error: 'Token not found in response' }, { status: 500 });
+    }
   } catch (error) {
-    console.error(error)
-    return new NextResponse('Error generating token', { status: 500 })
+    console.error('Token exchange error:', error.response?.data || error.message);
+    return NextResponse.json({ error: 'Failed to exchange code for token' }, { status: 500 });
   }
 }

@@ -1,127 +1,188 @@
-// src/lib/github-api.js - Next.js compatible GitHub API integration
+// lib/github-api.js
+const axios = require('axios');
+
 class GitHubAPI {
     constructor(token) {
-        this.token = token;
-        this.backendUrl = 'https://github-app-backend.vercel.app/api';
-        this.githubUrl = 'https://api.github.com';
+        this.token = token.replace('token ', ''); // Remove 'token ' prefix if present
+        this.client = axios.create({
+            baseURL: 'https://api.github.com',
+            headers: {
+                'Authorization': `token ${this.token}`,
+                'Accept': 'application/vnd.github+json',
+                'User-Agent': 'GitHub-Panel-Kit'
+            }
+        });
     }
 
-    // Use your deployed backend endpoints
-    async listRepos() {
-        try {
-            const response = await fetch(`${this.backendUrl}/list-repos`, {
-                headers: { Authorization: `token ${this.token}` }
-            });
-            return await response.json();
-        } catch (error) {
-            console.error('Error listing repos:', error);
-            throw error;
-        }
-    }
-
-    async createIssue(repo, title, body) {
-        try {
-            const response = await fetch(`${this.backendUrl}/create-issue`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `token ${this.token}`
-                },
-                body: JSON.stringify({ repo, title, body })
-            });
-            return await response.json();
-        } catch (error) {
-            console.error('Error creating issue:', error);
-            throw error;
-        }
-    }
-
-    // Direct GitHub API calls for other features
+    // Get user information
     async getUserInfo() {
         try {
-            const response = await fetch(`${this.githubUrl}/user`, {
-                headers: { Authorization: `token ${this.token}` }
-            });
-            return await response.json();
+            const response = await this.client.get('/user');
+            return response.data;
         } catch (error) {
-            console.error('Error fetching user info:', error);
+            console.error('Error fetching user info:', error.response?.data || error.message);
             throw error;
         }
     }
 
+    // List user repositories
+    async listRepos() {
+        try {
+            const response = await this.client.get('/user/repos', {
+                params: {
+                    sort: 'updated',
+                    per_page: 100
+                }
+            });
+            return response.data;
+        } catch (error) {
+            console.error('Error fetching repositories:', error.response?.data || error.message);
+            throw error;
+        }
+    }
+
+    // Get starred repositories
     async getStarredRepos() {
         try {
-            const response = await fetch(`${this.githubUrl}/user/starred`, {
-                headers: { Authorization: `token ${this.token}` }
+            const response = await this.client.get('/user/starred', {
+                params: {
+                    per_page: 100
+                }
             });
-            return await response.json();
+            return response.data;
         } catch (error) {
-            console.error('Error fetching starred repos:', error);
+            console.error('Error fetching starred repos:', error.response?.data || error.message);
             throw error;
         }
     }
 
-    async toggleStar(repoName, action = 'star') {
+    // Toggle star on repository
+    async toggleStar(repoFullName, action) {
         try {
             const method = action === 'star' ? 'PUT' : 'DELETE';
-            const response = await fetch(`${this.githubUrl}/user/starred/${repoName}`, {
-                method: method,
-                headers: { Authorization: `token ${this.token}` }
+            await this.client.request({
+                method,
+                url: `/user/starred/${repoFullName}`
             });
-            return response.status === 204;
+            return true;
         } catch (error) {
-            console.error('Error toggling star:', error);
+            console.error('Error toggling star:', error.response?.data || error.message);
             throw error;
         }
     }
 
-    async updateIssue(repo, issueNumber, title, body) {
+    // Create issue
+    async createIssue(repoFullName, title, body) {
         try {
-            const response = await fetch(`${this.githubUrl}/repos/${repo}/issues/${issueNumber}`, {
-                method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `token ${this.token}`
-                },
-                body: JSON.stringify({ title, body })
+            const response = await this.client.post(`/repos/${repoFullName}/issues`, {
+                title,
+                body
             });
-            return await response.json();
+            return response.data;
         } catch (error) {
-            console.error('Error updating issue:', error);
+            console.error('Error creating issue:', error.response?.data || error.message);
             throw error;
         }
     }
 
+    // Update issue
+    async updateIssue(repoFullName, issueNumber, title, body) {
+        try {
+            const response = await this.client.patch(`/repos/${repoFullName}/issues/${issueNumber}`, {
+                title,
+                body
+            });
+            return response.data;
+        } catch (error) {
+            console.error('Error updating issue:', error.response?.data || error.message);
+            throw error;
+        }
+    }
+
+    // Get commits chart data
     async getCommitsChart() {
         try {
             const repos = await this.listRepos();
-            const commitPromises = repos.repositories.map(async repo => {
-                const commitsResponse = await fetch(`${this.githubUrl}/repos/${repo.full_name}/commits?per_page=1`, {
-                    headers: { Authorization: `token ${this.token}` }
-                });
-                
-                const linkHeader = commitsResponse.headers.get('Link');
-                let totalCommits = 0;
+            const chartData = [];
 
-                if (linkHeader && linkHeader.includes('rel="last"')) {
-                    const lastPageUrl = linkHeader.split(',').find(s => s.includes('rel="last"')).split(';')[0].trim().slice(1, -1);
-                    const urlParams = new URLSearchParams(new URL(lastPageUrl).search);
-                    totalCommits = parseInt(urlParams.get('page'));
-                } else {
-                    const commits = await commitsResponse.json();
-                    totalCommits = commits.length;
+            // Get commits for each repository (limited to prevent API rate limits)
+            const topRepos = repos.slice(0, 10); // Limit to top 10 repos
+            
+            for (const repo of topRepos) {
+                try {
+                    const response = await this.client.get(`/repos/${repo.full_name}/commits`, {
+                        params: {
+                            per_page: 100,
+                            since: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString() // Last 30 days
+                        }
+                    });
+                    
+                    chartData.push({
+                        name: repo.name,
+                        commits: response.data.length
+                    });
+                } catch (error) {
+                    console.error(`Error fetching commits for ${repo.name}:`, error.message);
+                    chartData.push({
+                        name: repo.name,
+                        commits: 0
+                    });
                 }
+            }
 
-                return { name: repo.name, commits: totalCommits, pushed_at: repo.pushed_at };
-            });
-
-            const commitData = await Promise.all(commitPromises);
-            return commitData.sort((a, b) => new Date(a.pushed_at) - new Date(b.pushed_at));
+            return chartData;
         } catch (error) {
-            console.error('Error getting commits chart:', error);
+            console.error('Error fetching commits chart data:', error.response?.data || error.message);
+            throw error;
+        }
+    }
+
+    // Get repository issues
+    async getRepoIssues(repoFullName) {
+        try {
+            const response = await this.client.get(`/repos/${repoFullName}/issues`, {
+                params: {
+                    state: 'all',
+                    per_page: 100
+                }
+            });
+            return response.data;
+        } catch (error) {
+            console.error('Error fetching issues:', error.response?.data || error.message);
+            throw error;
+        }
+    }
+
+    // Get repository pull requests
+    async getRepoPullRequests(repoFullName) {
+        try {
+            const response = await this.client.get(`/repos/${repoFullName}/pulls`, {
+                params: {
+                    state: 'all',
+                    per_page: 100
+                }
+            });
+            return response.data;
+        } catch (error) {
+            console.error('Error fetching pull requests:', error.response?.data || error.message);
+            throw error;
+        }
+    }
+
+    // Get repository contributors
+    async getRepoContributors(repoFullName) {
+        try {
+            const response = await this.client.get(`/repos/${repoFullName}/contributors`, {
+                params: {
+                    per_page: 100
+                }
+            });
+            return response.data;
+        } catch (error) {
+            console.error('Error fetching contributors:', error.response?.data || error.message);
             throw error;
         }
     }
 }
 
-export default GitHubAPI;
+module.exports = GitHubAPI;
