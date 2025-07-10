@@ -1,7 +1,7 @@
 // src/app/github/page.js
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 
 export default function GitHubPage() {
@@ -46,6 +46,34 @@ export default function GitHubPage() {
                 });
         }
     }, [searchParams]);
+
+    const overviewRef = useRef(null);
+    const repositoriesRef = useRef(null);
+    const starredRef = useRef(null);
+
+
+    useEffect(() => {
+    const handleScroll = () => {
+        const sections = [
+            { id: 'overview', ref: overviewRef },
+            { id: 'repositories', ref: repositoriesRef },
+            { id: 'starred', ref: starredRef },
+        ];
+
+        const scrollPosition = window.scrollY + 150; // Add offset for sticky nav
+
+        for (let i = sections.length - 1; i >= 0; i--) {
+            const sectionTop = sections[i].ref.current?.offsetTop || 0;
+            if (scrollPosition >= sectionTop) {
+                setActiveTab(sections[i].id);
+                break;
+            }
+        }
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+}, []);
 
 
     // Load user data when token is available
@@ -153,18 +181,35 @@ export default function GitHubPage() {
         }
     };
 
+    const scrollToSection = (tab) => {
+        const sectionMap = {
+            overview: overviewRef,
+            repositories: repositoriesRef,
+            starred: starredRef,
+        };
+        sectionMap[tab]?.current?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start',
+        });
+    };
+
+
     if (!token) {
         return (
           <main className="p-8 max-w-4xl mx-auto">
             <h1 className="text-3xl font-bold mb-6 text-gray-900 dark:text-gray-100">🌐 GitHub Dashboard</h1>
-            <button
-                onClick={handleLogin}
-                className="cursor-pointer border p-4 rounded-xl hover:bg-gray-50 hover:text-gray-900 transition"
-            >
-                Login with GitHub
-            </button>
+
+            <nav className="fixed top-0 left-0 h-screen w-48 bg-white dark:bg-gray-800 border-r border-gray-200 p-4 shadow-lg z-10">
+                <div className="flex flex-col space-y-4 mt-20">
+                    <button
+                        onClick={handleLogin}
+                        className="text-left cursor-pointer border p-3 rounded-lg text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors"
+                    >
+                        Login
+                    </button>
+                </div>
+            </nav>
           </main>
-           
         );
     }
 
@@ -173,31 +218,35 @@ export default function GitHubPage() {
             {/* Header */}
             <div className="flex justify-between items-center">
                 <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">🌐 GitHub Dashboard</h1>
-                <button
-                    onClick={handleLogout}
-                    className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
-                >
-                    Logout
-                </button>
             </div>
             
             {/* Tabs */}
-            <div className="flex space-x-4 mt-6">
-                {['overview', 'repositories', 'starred'].map((tab) => (
+            <nav className="fixed top-0 left-0 h-screen w-48 bg-white dark:bg-gray-800 border-r border-gray-200 p-4 shadow-lg z-10">
+                <div className="flex flex-col space-y-4 mt-20">
+                    {['overview', 'repositories', 'starred'].map((tab) => (
+                        <button
+                            key={tab}
+                            onClick={() => scrollToSection(tab)}
+                            className={`text-left cursor-pointer border p-3 rounded-lg transition ${
+                                activeTab === tab
+                                    ? 'bg-gray-100 text-gray-900 dark:bg-gray-700 dark:text-white'
+                                    : 'text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700'
+                            }`}
+                        >
+                            {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                        </button>
+                    ))}
+                </div>
+                <div className="flex flex-col space-y-4 mt-20">
                     <button
-                        key={tab}
-                        onClick={() => setActiveTab(tab)}
-                        className={`px-6 py-2 rounded-lg font-medium transition-colors ${
-                            activeTab === tab
-                                ? 'bg-blue-600 text-white'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                        }`}
+                        onClick={handleLogout}
+                        className="text-left cursor-pointer border p-3 rounded-lg bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
                     >
-                        {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                        Logout
                     </button>
-                ))}
-            </div>
-          
+                </div>
+                
+            </nav>
 
             {/* Loading State */}
             {loading && (
@@ -218,8 +267,9 @@ export default function GitHubPage() {
             {!loading && !error && (
                 <>
                     {/* Overview Tab */}
-                    {activeTab === 'overview' && user && (
-                        <div className="bg-white rounded-lg shadow-lg p-6">
+                    <div ref={overviewRef} className="rounded-lg shadow-lg p-6">
+                        {user ? (
+                        <div className="rounded-lg shadow-lg p-6">
                             <div className="flex items-center space-x-6">
                                 <img
                                     src={user.avatar_url}
@@ -227,7 +277,7 @@ export default function GitHubPage() {
                                     className="w-24 h-24 rounded-full border-4 border-blue-500"
                                 />
                                 <div>
-                                    <h2 className="text-2xl font-bold text-gray-900">{user.name || user.login}</h2>
+                                    <h2 className="text-2xl font-bold text-gray-100">{user.name || user.login}</h2>
                                     <p className="text-gray-600">@{user.login}</p>
                                     <p className="text-gray-600 mt-2">{user.bio || 'No bio available'}</p>
                                 </div>
@@ -235,23 +285,26 @@ export default function GitHubPage() {
                             
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
                                 <div className="bg-blue-50 rounded-lg p-4 text-center">
-                                    <div className="text-3xl font-bold text-blue-600">{user.public_repos}</div>
+                                    <div className="text-3xl font-bold text-blue-600">{repos.length}</div>
                                     <div className="text-gray-600">Repositories</div>
                                 </div>
-                                <div className="bg-green-50 rounded-lg p-4 text-center">
-                                    <div className="text-3xl font-bold text-green-600">{user.followers}</div>
+                                <div className="bg-blue-50 rounded-lg p-4 text-center">
+                                    <div className="text-3xl font-bold text-blue-600">{user.followers}</div>
                                     <div className="text-gray-600">Followers</div>
                                 </div>
-                                <div className="bg-purple-50 rounded-lg p-4 text-center">
-                                    <div className="text-3xl font-bold text-purple-600">{user.following}</div>
+                                <div className="bg-blue-50 rounded-lg p-4 text-center">
+                                    <div className="text-3xl font-bold text-blue-600">{user.following}</div>
                                     <div className="text-gray-600">Following</div>
                                 </div>
                             </div>
                         </div>
-                    )}
+                        ) : (
+                            <p className="text-gray-400">Loading user info…</p>
+                        )}
+                        </div>
 
                     {/* Repositories Tab */}
-                    {activeTab === 'repositories' && (
+                    <div ref={repositoriesRef} className="rounded-lg shadow-lg p-6 mt-10">
                         <div className="bg-white rounded-lg shadow-lg p-6">
                             <h2 className="text-2xl font-bold text-gray-900 mb-6">Repositories ({repos.length})</h2>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -292,10 +345,10 @@ export default function GitHubPage() {
                                 ))}
                             </div>
                         </div>
-                    )}
+                    </div>
 
                     {/* Starred Tab */}
-                    {activeTab === 'starred' && (
+                    <div ref={starredRef} className="rounded-lg shadow-lg p-6 mt-10">
                         <div className="bg-white rounded-lg shadow-lg p-6">
                             <h2 className="text-2xl font-bold text-gray-900 mb-6">Starred Repositories ({starred.length})</h2>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -323,7 +376,7 @@ export default function GitHubPage() {
                                 ))}
                             </div>
                         </div>
-                    )}
+                    </div>
                 </>
             )} 
         </main>
