@@ -44,10 +44,52 @@ export async function GET(request) {
     }
 }
 
-// Handle preflight requests
+// PUT /api/github/starred?repo=OWNER/REPO - Star a repository
+export async function PUT(request) {
+    try {
+        const token = getTokenFromRequest(request);
+        const repo = request.nextUrl.searchParams.get('repo');
+
+        if (!token || !repo) {
+            return NextResponse.json({ error: 'Token and repo required' }, { status: 400 });
+        }
+
+        const api = new GitHubAPI(token);
+        await api.starRepo(repo);
+
+        return NextResponse.json({ success: true });
+
+    } catch (error) {
+        console.error('Error starring repo:', error);
+        return NextResponse.json({ error: 'Failed to star repo' }, { status: 500 });
+    }
+}
+
+// DELETE /api/github/starred?repo=OWNER/REPO - Unstar a repository
+export async function DELETE(request) {
+    try {
+        const token = getTokenFromRequest(request);
+        const repo = request.nextUrl.searchParams.get('repo');
+
+        if (!token || !repo) {
+            return NextResponse.json({ error: 'Token and repo required' }, { status: 400 });
+        }
+
+        const api = new GitHubAPI(token);
+        await api.unstarRepo(repo);
+
+        return NextResponse.json({ success: true });
+
+    } catch (error) {
+        console.error('Error unstarring repo:', error);
+        return NextResponse.json({ error: 'Failed to unstar repo' }, { status: 500 });
+    }
+}
+
+// Handle preflight CORS requests
 export async function OPTIONS(request) {
     return new Response(null, {
-        status: 2,
+        status: 204,
         headers: {
             'Access-Control-Allow-Origin': '*',
             'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',

@@ -56,6 +56,26 @@ class GitHubAPI {
         }
     }
 
+    async starRepo(fullName) {
+        try {
+            await this.client.put(`/user/starred/${fullName}`, null, {
+                headers: { 'Content-Length': '0' }
+            });
+        } catch (error) {
+            console.error('Error starring repo:', error.response?.data || error.message);
+            throw error;
+        }
+    }
+
+    async unstarRepo(fullName) {
+        try {
+            await this.client.delete(`/user/starred/${fullName}`);
+        } catch (error) {
+            console.error('Error unstarring repo:', error.response?.data || error.message);
+            throw error;
+        }
+    }
+
     // Toggle star on repository
     async toggleStar(repoFullName, action) {
         try {
