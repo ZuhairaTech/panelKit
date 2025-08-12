@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 
 function getCurrentDate() {
@@ -13,7 +13,16 @@ function getCurrentDate() {
     });
 }
 
+// Wrapper component for Suspense
 export default function WeatherPage() {
+    return (
+        <Suspense fallback={<div>Loading Weather App data...</div>}>
+            <WeatherContent />
+        </Suspense>
+    );
+}
+
+function WeatherContent() {
     const [weatherData, setWeatherData] = useState(null);
     const [city, setCity] = useState("kelantan");
     const [inputCity, setInputCity] = useState("");

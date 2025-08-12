@@ -1,11 +1,21 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import CommitsChart from '../../../components/CommitsChart';
 
+// Wrapper component for Suspense
 export default function GitHubPage() {
+    return (
+        <Suspense fallback={<div>Loading GitHub data...</div>}>
+            <GitHubContent />
+        </Suspense>
+    );
+}
+
+// Actual page content
+function GitHubContent() {
     const [user, setUser] = useState(null);
     const [repos, setRepos] = useState([]);
     const [starred, setStarred] = useState([]);
