@@ -20,12 +20,12 @@ const apis = [
     lastUpdated: '5 mins ago'
   },
   { 
-    name: 'Crypto Prices', 
-    slug: 'crypto', 
-    desc: 'Live cryptocurrency market data', 
-    emoji: '📈',
-    status: 'warning',
-    lastUpdated: '1 hour ago'
+    name: 'Flower Archives', 
+    slug: 'flower', 
+    desc: 'Browse flower and plant species data', 
+    emoji: '🌸',
+    status: 'online',
+    lastUpdated: 'just now'
   },
 ]
 
